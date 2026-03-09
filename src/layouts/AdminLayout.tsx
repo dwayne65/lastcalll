@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard, FileText, DollarSign, Users, Settings, LogOut, ChevronLeft, ImageIcon,
+  LayoutDashboard, FileText, DollarSign, Users, Settings, LogOut, ChevronLeft, ImageIcon, UserCircle, Mail, UsersRound, BookOpen, FolderOpen, Hash,
 } from "lucide-react";
 import {
   SidebarProvider, Sidebar, SidebarContent, SidebarGroup,
@@ -9,18 +9,40 @@ import {
   SidebarMenuButton, SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { NavLink } from "@/components/NavLink";
+import { useAuth } from "@/hooks/useAuth";
+import type { Role } from "@/lib/api-types";
 
-const navItems = [
+const CONTENT_ROLES: Role[] = ["SUPER_ADMIN", "ADMIN", "EDITOR", "CONTRIBUTOR"];
+const ADMIN_ROLES: Role[] = ["SUPER_ADMIN", "ADMIN"];
+const FINANCE_ROLES: Role[] = ["SUPER_ADMIN", "ADMIN", "FINANCE"];
+
+const navItems: { title: string; url: string; icon: typeof LayoutDashboard; roles?: Role[] }[] = [
   { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
-  { title: "Content", url: "/admin/content", icon: FileText },
-  { title: "Media", url: "/admin/media", icon: ImageIcon },
-  { title: "Donations", url: "/admin/donations", icon: DollarSign },
-  { title: "Users & Roles", url: "/admin/users", icon: Users },
-  { title: "Settings", url: "/admin/settings", icon: Settings },
+  { title: "Content", url: "/admin/content", icon: FileText, roles: CONTENT_ROLES },
+  { title: "Series", url: "/admin/series", icon: BookOpen, roles: CONTENT_ROLES },
+  { title: "Categories", url: "/admin/categories", icon: FolderOpen, roles: CONTENT_ROLES },
+  { title: "Tags", url: "/admin/tags", icon: Hash, roles: CONTENT_ROLES },
+  { title: "Media", url: "/admin/media", icon: ImageIcon, roles: CONTENT_ROLES },
+  { title: "Donations", url: "/admin/donations", icon: DollarSign, roles: FINANCE_ROLES },
+  { title: "Users & Roles", url: "/admin/users", icon: Users, roles: ADMIN_ROLES },
+  { title: "Subscribers", url: "/admin/subscribers", icon: UsersRound, roles: ADMIN_ROLES },
+  { title: "Inquiries", url: "/admin/inquiries", icon: Mail, roles: ADMIN_ROLES },
+  { title: "Settings", url: "/admin/settings", icon: Settings, roles: ADMIN_ROLES },
 ];
 
 const AdminLayout = ({ children }: { children: ReactNode }) => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout, user } = useAuth();
+
+  const handleSignOut = () => {
+    logout();
+    navigate("/admin/login");
+  };
+
+  const filteredNav = navItems.filter(
+    (item) => !item.roles || (user && item.roles.includes(user.role)),
+  );
 
   return (
     <SidebarProvider>
@@ -41,7 +63,7 @@ const AdminLayout = ({ children }: { children: ReactNode }) => {
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {navItems.map((item) => (
+                  {filteredNav.map((item) => (
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton asChild>
                         <NavLink
@@ -60,8 +82,17 @@ const AdminLayout = ({ children }: { children: ReactNode }) => {
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
-          <div className="mt-auto p-4 border-t border-sidebar-border">
-            <button className="flex items-center gap-2 text-sm text-sidebar-foreground/60 hover:text-sidebar-foreground">
+          <div className="mt-auto p-4 border-t border-sidebar-border space-y-2">
+            <button
+              onClick={() => navigate("/admin/profile")}
+              className="flex items-center gap-2 text-sm text-sidebar-foreground/60 hover:text-sidebar-foreground w-full"
+            >
+              <UserCircle className="w-4 h-4" /> My Profile
+            </button>
+            <button
+              onClick={handleSignOut}
+              className="flex items-center gap-2 text-sm text-sidebar-foreground/60 hover:text-sidebar-foreground w-full"
+            >
               <LogOut className="w-4 h-4" /> Sign Out
             </button>
           </div>
@@ -71,7 +102,7 @@ const AdminLayout = ({ children }: { children: ReactNode }) => {
           <header className="h-14 border-b border-border bg-background flex items-center px-4 gap-3">
             <SidebarTrigger />
             <span className="text-sm text-muted-foreground font-medium">
-              {navItems.find((n) => location.pathname === n.url || (n.url !== "/admin" && location.pathname.startsWith(n.url)))?.title || "Admin"}
+              {filteredNav.find((n) => location.pathname === n.url || (n.url !== "/admin" && location.pathname.startsWith(n.url)))?.title || "Admin"}
             </span>
           </header>
           <main className="flex-1 p-6 bg-background overflow-auto">

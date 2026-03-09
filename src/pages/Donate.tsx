@@ -5,21 +5,31 @@ import { Input } from "@/components/ui/input";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { motion, AnimatePresence } from "framer-motion";
+import { useInitiateDonation } from "@/hooks/useApi";
+import { useToast } from "@/hooks/use-toast";
 
 const suggestedAmounts = [25, 50, 100, 250, 500, 1000];
 
-type PaymentMethod = "credit" | "momo" | "paypal";
+type LocalPaymentMethod = "credit" | "momo" | "paypal";
 
-const paymentMethods: { id: PaymentMethod; label: string; icon: React.ElementType; desc: string }[] = [
+const paymentMethodMap: Record<LocalPaymentMethod, "CARD" | "MOBILE_MONEY" | "PAYPAL"> = {
+  credit: "CARD",
+  momo: "MOBILE_MONEY",
+  paypal: "PAYPAL",
+};
+
+const paymentMethods: { id: LocalPaymentMethod; label: string; icon: React.ElementType; desc: string }[] = [
   { id: "credit", label: "Credit / Debit Card", icon: CreditCard, desc: "Visa, Mastercard, Amex" },
   { id: "momo", label: "Mobile Money", icon: Smartphone, desc: "MTN, Vodafone, AirtelTigo" },
   { id: "paypal", label: "PayPal", icon: Wallet, desc: "Pay with your PayPal account" },
 ];
 
 const Donate = () => {
+  const { toast } = useToast();
+  const initiateDonation = useInitiateDonation();
   const [amount, setAmount] = useState<number | "">("");
   const [selectedPreset, setSelectedPreset] = useState<number | null>(100);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("credit");
+  const [paymentMethod, setPaymentMethod] = useState<LocalPaymentMethod>("credit");
   const [isRecurring, setIsRecurring] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
 
@@ -395,11 +405,33 @@ const Donate = () => {
                 </AnimatePresence>
 
                 {/* Donate Button */}
-                <Button className="w-full h-14 text-lg bg-gradient-gold text-primary font-bold gap-2 hover:opacity-90 transition-opacity">
-                  {paymentMethod === "paypal" ? "Continue to PayPal" : "Donate Now"} — $
-                  {Number(finalAmount).toLocaleString()}
-                  {isRecurring ? "/mo" : ""}
-                  <ArrowRight className="w-5 h-5" />
+                <Button
+                  className="w-full h-14 text-lg bg-gradient-gold text-primary font-bold gap-2 hover:opacity-90 transition-opacity"
+                  disabled={initiateDonation.isPending}
+                  onClick={() => {
+                    initiateDonation.mutate(
+                      {
+                        amount: Number(finalAmount),
+                        paymentMethod: paymentMethodMap[paymentMethod],
+                        isRecurring,
+                      },
+                      {
+                        onSuccess: (res) => {
+                          if (res.checkoutUrl) {
+                            window.location.href = res.checkoutUrl;
+                          } else {
+                            toast({ title: "Donation initiated!", description: "Thank you for your generous gift." });
+                          }
+                        },
+                        onError: () => toast({ title: "Donation failed", description: "Please try again.", variant: "destructive" }),
+                      }
+                    );
+                  }}
+                >
+                  {initiateDonation.isPending
+                    ? "Processing..."
+                    : `${paymentMethod === "paypal" ? "Continue to PayPal" : "Donate Now"} — $${Number(finalAmount).toLocaleString()}${isRecurring ? "/mo" : ""}`}
+                  {!initiateDonation.isPending && <ArrowRight className="w-5 h-5" />}
                 </Button>
 
                 <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">

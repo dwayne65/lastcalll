@@ -2,9 +2,16 @@ import { Link } from "react-router-dom";
 import { Play, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
+import { usePublicSettings } from "@/hooks/useApi";
 import heroBg from "@/assets/hero-bg.jpg";
 
-const HeroSection = () => (
+const HeroSection = () => {
+  const { data: settings } = usePublicSettings();
+
+  const tagline = settings?.tagline || "Teaching present truth for these last days through powerful sermons, Bible studies, and prophetic insights.";
+  const siteName = settings?.site_name || "Last Call Messages";
+
+  return (
   <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden">
     <img
       src={heroBg}
@@ -41,8 +48,7 @@ const HeroSection = () => (
         transition={{ duration: 0.6, delay: 0.3 }}
         className="mt-6 text-cream/70 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed font-sans"
       >
-        Teaching present truth for these last days through powerful sermons,
-        Bible studies, and prophetic insights.
+        {tagline}
       </motion.p>
 
       <motion.div
@@ -70,6 +76,7 @@ const HeroSection = () => (
       </motion.div>
     </div>
   </section>
-);
+  );
+};
 
 export default HeroSection;

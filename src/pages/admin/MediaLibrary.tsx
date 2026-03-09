@@ -31,7 +31,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 
-import { mockMedia, type MediaItem } from "@/data/mediaData";
+import { useMedia, useUploadMedia, useDeleteMedia } from "@/hooks/useApi";
+import type { MediaAsset } from "@/lib/api-types";
 
 type MediaType = "all" | "image" | "video" | "audio" | "document";
 type ViewMode = "grid" | "list";
@@ -50,34 +51,46 @@ const typeColors: Record<string, string> = {
   document: "bg-amber-500/10 text-amber-400",
 };
 
+const formatSize = (bytes: number) => {
+  if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${bytes} B`;
+};
+
 const MediaLibrary = () => {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [media, setMedia] = useState<MediaItem[]>(mockMedia);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<MediaType>("all");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [isDragging, setIsDragging] = useState(false);
-  const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
+  const [previewItem, setPreviewItem] = useState<MediaAsset | null>(null);
   const [sortBy, setSortBy] = useState<"name" | "date" | "size">("date");
 
-  const filtered = media
-    .filter((m) => filterType === "all" || m.type === filterType)
-    .filter((m) => m.name.toLowerCase().includes(search.toLowerCase()))
+  const typeParam = filterType === "all" ? undefined : filterType;
+  const { data, isLoading } = useMedia({ limit: 100, type: typeParam });
+  const uploadMedia = useUploadMedia();
+  const deleteMedia = useDeleteMedia();
+
+  const allItems = data?.data || [];
+
+  const filtered = allItems
+    .filter((m) => m.originalName.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
-      if (sortBy === "name") return a.name.localeCompare(b.name);
-      if (sortBy === "date") return b.uploadedAt.localeCompare(a.uploadedAt);
+      if (sortBy === "name") return a.originalName.localeCompare(b.originalName);
+      if (sortBy === "date") return b.createdAt.localeCompare(a.createdAt);
+      if (sortBy === "size") return b.size - a.size;
       return 0;
     });
 
   const stats = {
-    total: media.length,
-    images: media.filter((m) => m.type === "image").length,
-    videos: media.filter((m) => m.type === "video").length,
-    audio: media.filter((m) => m.type === "audio").length,
-    documents: media.filter((m) => m.type === "document").length,
+    total: allItems.length,
+    images: allItems.filter((m) => m.type === "IMAGE").length,
+    videos: allItems.filter((m) => m.type === "VIDEO").length,
+    audio: allItems.filter((m) => m.type === "AUDIO").length,
+    documents: allItems.filter((m) => m.type === "DOCUMENT").length,
   };
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -94,22 +107,22 @@ const MediaLibrary = () => {
     e.preventDefault();
     setIsDragging(false);
     const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) {
-      toast({
-        title: `${files.length} file(s) ready to upload`,
-        description: "Connect Lovable Cloud to enable persistent storage.",
+    files.forEach((file) => {
+      uploadMedia.mutate(file, {
+        onSuccess: () => toast({ title: `"${file.name}" uploaded` }),
+        onError: () => toast({ title: `Failed to upload "${file.name}"`, variant: "destructive" }),
       });
-    }
-  }, [toast]);
+    });
+  }, [uploadMedia, toast]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    if (files.length > 0) {
-      toast({
-        title: `${files.length} file(s) selected`,
-        description: "Connect Lovable Cloud to enable persistent storage.",
+    files.forEach((file) => {
+      uploadMedia.mutate(file, {
+        onSuccess: () => toast({ title: `"${file.name}" uploaded` }),
+        onError: () => toast({ title: `Failed to upload "${file.name}"`, variant: "destructive" }),
       });
-    }
+    });
   };
 
   const toggleSelect = (id: string) => {
@@ -129,12 +142,13 @@ const MediaLibrary = () => {
   };
 
   const deleteSelected = () => {
-    setMedia((prev) => prev.filter((m) => !selected.has(m.id)));
-    toast({ title: `${selected.size} item(s) deleted` });
+    const count = selected.size;
+    selected.forEach((id) => deleteMedia.mutate(id));
+    toast({ title: `${count} item(s) deleted` });
     setSelected(new Set());
   };
 
-  const copyUrl = (item: MediaItem) => {
+  const copyUrl = (item: MediaAsset) => {
     navigator.clipboard.writeText(item.url);
     toast({ title: "URL copied to clipboard" });
   };
@@ -276,7 +290,7 @@ const MediaLibrary = () => {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
             <AnimatePresence>
               {filtered.map((item) => {
-                const Icon = typeIcons[item.type];
+                const Icon = typeIcons[item.type.toLowerCase()] || Image;
                 const isSelected = selected.has(item.id);
                 return (
                   <motion.div
@@ -295,8 +309,8 @@ const MediaLibrary = () => {
                     >
                       {/* Thumbnail */}
                       <div className="aspect-square relative bg-muted/30 overflow-hidden">
-                        {item.thumbnail ? (
-                          <img src={item.thumbnail} alt={item.name} className="w-full h-full object-cover" />
+                        {item.thumbnailUrl ? (
+                          <img src={item.thumbnailUrl} alt={item.originalName} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
                             <Icon className="w-10 h-10 text-muted-foreground/40" />
@@ -330,14 +344,14 @@ const MediaLibrary = () => {
                           {isSelected && <Check className="w-3 h-3 text-primary" />}
                         </div>
                         {/* Type badge */}
-                        <Badge className={`absolute top-2 right-2 text-[10px] px-1.5 py-0 ${typeColors[item.type]}`}>
-                          {item.type}
+                        <Badge className={`absolute top-2 right-2 text-[10px] px-1.5 py-0 ${typeColors[item.type.toLowerCase()] || ""}`}>
+                          {item.type.toLowerCase()}
                         </Badge>
                       </div>
                       <CardContent className="p-2.5">
-                        <p className="text-xs font-medium text-foreground truncate">{item.name}</p>
+                        <p className="text-xs font-medium text-foreground truncate">{item.originalName}</p>
                         <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {item.size} {item.dimensions && `· ${item.dimensions}`}
+                          {formatSize(item.size)} {item.width && item.height && `· ${item.width}×${item.height}`}
                         </p>
                       </CardContent>
                     </Card>
@@ -351,7 +365,7 @@ const MediaLibrary = () => {
           <Card className="border-border overflow-hidden">
             <div className="divide-y divide-border">
               {filtered.map((item) => {
-                const Icon = typeIcons[item.type];
+                const Icon = typeIcons[item.type.toLowerCase()] || Image;
                 const isSelected = selected.has(item.id);
                 return (
                   <div
@@ -366,21 +380,23 @@ const MediaLibrary = () => {
                     }`}>
                       {isSelected && <Check className="w-3 h-3 text-primary" />}
                     </div>
-                    {item.thumbnail ? (
-                      <img src={item.thumbnail} alt={item.name} className="w-10 h-10 rounded object-cover flex-shrink-0" />
+                    {item.thumbnailUrl ? (
+                      <img src={item.thumbnailUrl} alt={item.originalName} className="w-10 h-10 rounded object-cover flex-shrink-0" />
                     ) : (
                       <div className="w-10 h-10 rounded bg-muted/30 flex items-center justify-center flex-shrink-0">
                         <Icon className="w-5 h-5 text-muted-foreground/50" />
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{item.name}</p>
-                      <p className="text-xs text-muted-foreground">{item.size} {item.dimensions && `· ${item.dimensions}`}</p>
+                      <p className="text-sm font-medium text-foreground truncate">{item.originalName}</p>
+                      <p className="text-xs text-muted-foreground">{formatSize(item.size)} {item.width && item.height && `· ${item.width}×${item.height}`}</p>
                     </div>
-                    <Badge variant="outline" className={`text-[10px] ${typeColors[item.type]}`}>
-                      {item.type}
+                    <Badge variant="outline" className={`text-[10px] ${typeColors[item.type.toLowerCase()] || ""}`}>
+                      {item.type.toLowerCase()}
                     </Badge>
-                    <span className="text-xs text-muted-foreground hidden sm:inline">{item.uploadedAt}</span>
+                    <span className="text-xs text-muted-foreground hidden sm:inline">
+                      {new Date(item.createdAt).toLocaleDateString()}
+                    </span>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={(e) => e.stopPropagation()}>
@@ -400,8 +416,9 @@ const MediaLibrary = () => {
                         <DropdownMenuItem
                           className="text-destructive"
                           onClick={() => {
-                            setMedia((prev) => prev.filter((m) => m.id !== item.id));
-                            toast({ title: `"${item.name}" deleted` });
+                            deleteMedia.mutate(item.id, {
+                              onSuccess: () => toast({ title: `"${item.originalName}" deleted` }),
+                            });
                           }}
                         >
                           <Trash2 className="w-4 h-4 mr-2" /> Delete
@@ -427,24 +444,24 @@ const MediaLibrary = () => {
       <Dialog open={!!previewItem} onOpenChange={() => setPreviewItem(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle className="font-serif">{previewItem?.name}</DialogTitle>
+            <DialogTitle className="font-serif">{previewItem?.originalName}</DialogTitle>
           </DialogHeader>
           {previewItem && (
             <div className="space-y-4">
-              {previewItem.thumbnail ? (
-                <img src={previewItem.thumbnail} alt={previewItem.name} className="w-full rounded-lg max-h-96 object-contain bg-muted/20" />
+              {previewItem.thumbnailUrl ? (
+                <img src={previewItem.thumbnailUrl} alt={previewItem.originalName} className="w-full rounded-lg max-h-96 object-contain bg-muted/20" />
               ) : (
                 <div className="w-full h-48 rounded-lg bg-muted/20 flex items-center justify-center">
-                  {(() => { const Icon = typeIcons[previewItem.type]; return <Icon className="w-16 h-16 text-muted-foreground/30" />; })()}
+                  {(() => { const Icon = typeIcons[previewItem.type.toLowerCase()] || Image; return <Icon className="w-16 h-16 text-muted-foreground/30" />; })()}
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><span className="text-muted-foreground">Type:</span> <span className="text-foreground capitalize ml-1">{previewItem.type}</span></div>
-                <div><span className="text-muted-foreground">Size:</span> <span className="text-foreground ml-1">{previewItem.size}</span></div>
-                {previewItem.dimensions && (
-                  <div><span className="text-muted-foreground">Dimensions:</span> <span className="text-foreground ml-1">{previewItem.dimensions}</span></div>
+                <div><span className="text-muted-foreground">Type:</span> <span className="text-foreground capitalize ml-1">{previewItem.type.toLowerCase()}</span></div>
+                <div><span className="text-muted-foreground">Size:</span> <span className="text-foreground ml-1">{formatSize(previewItem.size)}</span></div>
+                {previewItem.width && previewItem.height && (
+                  <div><span className="text-muted-foreground">Dimensions:</span> <span className="text-foreground ml-1">{previewItem.width}×{previewItem.height}</span></div>
                 )}
-                <div><span className="text-muted-foreground">Uploaded:</span> <span className="text-foreground ml-1">{previewItem.uploadedAt}</span></div>
+                <div><span className="text-muted-foreground">Uploaded:</span> <span className="text-foreground ml-1">{new Date(previewItem.createdAt).toLocaleDateString()}</span></div>
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" className="gap-2 flex-1" onClick={() => copyUrl(previewItem)}>
@@ -457,9 +474,12 @@ const MediaLibrary = () => {
                   variant="destructive"
                   className="gap-2"
                   onClick={() => {
-                    setMedia((prev) => prev.filter((m) => m.id !== previewItem.id));
-                    setPreviewItem(null);
-                    toast({ title: "File deleted" });
+                    deleteMedia.mutate(previewItem.id, {
+                      onSuccess: () => {
+                        setPreviewItem(null);
+                        toast({ title: "File deleted" });
+                      },
+                    });
                   }}
                 >
                   <Trash2 className="w-4 h-4" />

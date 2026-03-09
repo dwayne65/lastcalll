@@ -8,6 +8,8 @@ import GlobalSearch from "@/components/GlobalSearch";
 const navLinks = [
   { label: "Home", path: "/" },
   { label: "Sermons", path: "/sermons" },
+  { label: "Blog", path: "/blog" },
+  { label: "Resources", path: "/resources" },
   { label: "About", path: "/about" },
   { label: "Contact", path: "/contact" },
 ];

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MapPin, Phone, Mail, Clock, Send, Youtube, Instagram, Facebook } from "lucide-react";
+import { MapPin, Phone, Mail, Clock, Send, Youtube, Instagram, Facebook, Twitter, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,30 +8,40 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
+import { useCreateInquiry, usePublicSettings, useSocialLinks } from "@/hooks/useApi";
 
-const socialLinks = [
-  { icon: Youtube, label: "YouTube", url: "https://youtube.com" },
-  { icon: Instagram, label: "Instagram", url: "https://instagram.com" },
-  { icon: Facebook, label: "Facebook", url: "https://facebook.com" },
-];
+const platformIcons: Record<string, any> = {
+  youtube: Youtube,
+  instagram: Instagram,
+  facebook: Facebook,
+  twitter: Twitter,
+};
 
 const Contact = () => {
   const { toast } = useToast();
   const [form, setForm] = useState({ name: "", email: "", subject: "", message: "" });
-  const [sending, setSending] = useState(false);
+  const createInquiry = useCreateInquiry();
+  const { data: settings } = usePublicSettings();
+  const { data: socialLinks } = useSocialLinks();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim() || !form.email.trim() || !form.message.trim()) {
       toast({ title: "Please fill in all required fields", variant: "destructive" });
       return;
     }
-    setSending(true);
-    setTimeout(() => {
-      setSending(false);
+    try {
+      await createInquiry.mutateAsync({
+        name: form.name,
+        email: form.email,
+        subject: form.subject || undefined,
+        message: form.message,
+      });
       toast({ title: "Message sent!", description: "We'll get back to you soon." });
       setForm({ name: "", email: "", subject: "", message: "" });
-    }, 1500);
+    } catch {
+      toast({ title: "Failed to send message", description: "Please try again later.", variant: "destructive" });
+    }
   };
 
   return (
@@ -106,11 +116,11 @@ const Contact = () => {
                 </div>
                 <Button
                   type="submit"
-                  disabled={sending}
+                  disabled={createInquiry.isPending}
                   className="bg-gradient-gold text-primary font-semibold gap-2 hover:opacity-90 w-full sm:w-auto"
                 >
                   <Send className="w-4 h-4" />
-                  {sending ? "Sending..." : "Send Message"}
+                  {createInquiry.isPending ? "Sending..." : "Send Message"}
                 </Button>
               </form>
             </motion.div>
@@ -128,20 +138,20 @@ const Contact = () => {
                   <div className="flex gap-3">
                     <MapPin className="w-5 h-5 text-gold flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-sm font-medium text-foreground">Last Call Messages</p>
-                      <p className="text-sm text-muted-foreground">123 Advent Way, Suite 200<br />Berrien Springs, MI 49103</p>
+                      <p className="text-sm font-medium text-foreground">{settings?.site_name || "Last Call Messages"}</p>
+                      <p className="text-sm text-muted-foreground">{settings?.address || "Address not available"}</p>
                     </div>
                   </div>
                   <div className="flex gap-3">
                     <Phone className="w-5 h-5 text-gold flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-sm text-foreground">(269) 555-0147</p>
+                      <p className="text-sm text-foreground">{settings?.phone || "Phone not available"}</p>
                     </div>
                   </div>
                   <div className="flex gap-3">
                     <Mail className="w-5 h-5 text-gold flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-sm text-foreground">contact@lastcallmessages.org</p>
+                      <p className="text-sm text-foreground">{settings?.contact_email || settings?.email || "Email not available"}</p>
                     </div>
                   </div>
                   <div className="flex gap-3">
@@ -158,18 +168,21 @@ const Contact = () => {
                 <h3 className="font-serif text-lg font-semibold text-foreground mb-4">Follow Us</h3>
                 <p className="text-sm text-muted-foreground mb-4">Stay connected on social media for the latest sermons and updates.</p>
                 <div className="flex gap-3">
-                  {socialLinks.map(({ icon: Icon, label, url }) => (
-                    <a
-                      key={label}
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={label}
-                      className="w-11 h-11 rounded-full bg-muted flex items-center justify-center hover:bg-gold/20 hover:text-gold transition-colors text-muted-foreground"
-                    >
-                      <Icon className="w-5 h-5" />
-                    </a>
-                  ))}
+                  {(socialLinks || []).map((link) => {
+                    const Icon = platformIcons[link.platform?.toLowerCase()] || Globe;
+                    return (
+                      <a
+                        key={link.platform}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={link.platform}
+                        className="w-11 h-11 rounded-full bg-muted flex items-center justify-center hover:bg-gold/20 hover:text-gold transition-colors text-muted-foreground"
+                      >
+                        <Icon className="w-5 h-5" />
+                      </a>
+                    );
+                  })}
                 </div>
               </div>
             </motion.div>

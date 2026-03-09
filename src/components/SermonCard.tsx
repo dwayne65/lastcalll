@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 
 interface SermonCardProps {
   title: string;
+  slug: string;
   speaker: string;
   date: string;
   thumbnail: string;
@@ -24,21 +25,20 @@ const mediaIcons = {
 
 const SermonCard = ({
   title,
+  slug,
   speaker,
   date,
   thumbnail,
   scripture,
   mediaTypes,
   index = 0,
-  views = Math.floor(Math.random() * 3000) + 200,
+  views = 0,
 }: SermonCardProps) => {
   const [liked, setLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(Math.floor(Math.random() * 120) + 10);
+  const [likeCount, setLikeCount] = useState(0);
   const [saved, setSaved] = useState(false);
   const [showActions, setShowActions] = useState(false);
   const { toast } = useToast();
-
-  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-$/, "");
 
   const handleLike = (e: React.MouseEvent) => {
     e.preventDefault();

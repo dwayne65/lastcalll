@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useParams } from "react-router-dom";
 import AdminLayout from "@/layouts/AdminLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,11 @@ import { useToast } from "@/hooks/use-toast";
 import MediaPickerDialog from "@/components/admin/MediaPickerDialog";
 import MarkdownPreview from "@/components/admin/MarkdownPreview";
 import { useAutosave } from "@/hooks/useAutosave";
+import { useCreateSermon, useUpdateSermon, useSpeakers, useCreatePost, useUpdatePost, useCreateResource, useUpdateResource, useUploadMedia, useSeries, useCategories, useTags } from "@/hooks/useApi";
+import { api } from "@/lib/api-client";
+import type { Sermon, Post, Resource } from "@/lib/api-types";
 import type { MediaItem } from "@/data/mediaData";
+import { Paperclip, Upload, X } from "lucide-react";
 
 type ContentType = "sermon" | "blog" | "resource";
 type PublishStatus = "draft" | "published" | "scheduled";
@@ -65,6 +69,7 @@ const toolbarGroups = [
 const ContentEditor = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { id } = useParams();
   const { toast } = useToast();
 
   const editType = (searchParams.get("type") as ContentType) || "sermon";
@@ -83,12 +88,85 @@ const ContentEditor = () => {
   const [showPreview, setShowPreview] = useState(false);
   const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
 
+  const [videoUrl, setVideoUrl] = useState("");
+  const [audioUrl, setAudioUrl] = useState("");
+  const [pdfUrl, setPdfUrl] = useState("");
+  const [attachments, setAttachments] = useState<{ name: string; url: string }[]>([]);
+
+  // Post-specific
+  const [categoryId, setCategoryId] = useState("");
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [featuredImage, setFeaturedImage] = useState("");
+
+  // Sermon-specific
+  const [seriesId, setSeriesId] = useState("");
+
+  // Resource-specific
+  const [resourceType, setResourceType] = useState("document");
+  const [fileUrl, setFileUrl] = useState("");
+  const [coverUrl, setCoverUrl] = useState("");
+
+  const createSermon = useCreateSermon();
+  const updateSermon = useUpdateSermon();
+  const createPost = useCreatePost();
+  const updatePost = useUpdatePost();
+  const createResource = useCreateResource();
+  const updateResource = useUpdateResource();
+  const { data: speakerList } = useSpeakers();
+  const { data: allSeries } = useSeries();
+  const { data: allCategories } = useCategories();
+  const { data: allTags } = useTags();
+  const uploadMedia = useUploadMedia();
+
   const autosaveData = { title, contentType, status, speaker, scripture, date, body, seoTitle, seoDesc };
   const { lastSaved, loadSaved, clearSaved } = useAutosave(autosaveData, 30000);
 
-  // Offer to restore draft on mount
+  // Load existing content when editing
   useEffect(() => {
-    if (hasRestoredDraft) return;
+    if (!id) return;
+    if (contentType === "blog") {
+      api.get<Post>(`/posts/${id}`).then((p) => {
+        setTitle(p.title);
+        setBody(p.body || "");
+        setStatus(p.status === "PUBLISHED" ? "published" : "draft");
+        setDate(p.publishedAt ? new Date(p.publishedAt).toISOString().split("T")[0] : "");
+        setCategoryId(p.categoryId || "");
+        setSelectedTagIds(p.tags?.map((t) => t.id) || []);
+        setFeaturedImage(p.featuredImage || "");
+      }).catch(() => {});
+    } else if (contentType === "resource") {
+      api.get<Resource>(`/resources/${id}`).then((r) => {
+        setTitle(r.title);
+        setBody(r.description || "");
+        setStatus(r.status === "PUBLISHED" ? "published" : "draft");
+        setDate(r.publishedAt ? new Date(r.publishedAt).toISOString().split("T")[0] : "");
+        setResourceType(r.type || "document");
+        setFileUrl(r.fileUrl || "");
+        setCoverUrl(r.coverUrl || "");
+        setSelectedTagIds(r.tags?.map((t) => t.id) || []);
+      }).catch(() => {});
+    } else {
+      api.get<Sermon>(`/sermons/${id}`).then((s) => {
+        setTitle(s.title);
+        setSpeaker(s.speaker || "");
+        setScripture(s.scripture || "");
+        setBody(s.transcript || s.description || "");
+        setStatus(s.status === "PUBLISHED" ? "published" : "draft");
+        setDate(s.publishedAt ? new Date(s.publishedAt).toISOString().split("T")[0] : "");
+        setSeoTitle(s.seoTitle || "");
+        setSeoDesc(s.seoDescription || "");
+        setVideoUrl(s.videoUrl || "");
+        setAudioUrl(s.audioUrl || "");
+        setPdfUrl(s.pdfUrl || "");
+        setSeriesId(s.seriesId || "");
+        setSelectedTagIds(s.tags?.map((t) => t.id) || []);
+      }).catch(() => {});
+    }
+  }, [id, contentType]);
+
+  // Offer to restore draft on mount (only for new content)
+  useEffect(() => {
+    if (hasRestoredDraft || id) return;
     const saved = loadSaved();
     if (saved && (saved.title || saved.body)) {
       const restore = window.confirm("A saved draft was found. Would you like to restore it?");
@@ -127,16 +205,98 @@ const ContentEditor = () => {
     toast({ title: "Media inserted", description: `"${item.name}" added to content.` });
   };
 
-  const handleSave = (pub: PublishStatus) => {
+  const handleFileAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    for (const file of files) {
+      try {
+        const asset = await uploadMedia.mutateAsync(file);
+        setAttachments((prev) => [...prev, { name: file.name, url: asset.url }]);
+        toast({ title: `"${file.name}" attached` });
+      } catch {
+        toast({ title: `Failed to upload "${file.name}"`, variant: "destructive" });
+      }
+    }
+    e.target.value = "";
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSave = async (pub: PublishStatus) => {
     if (!title.trim()) {
       toast({ title: "Title is required", variant: "destructive" });
       return;
     }
-    setStatus(pub);
-    toast({
-      title: pub === "published" ? "Content published!" : "Draft saved",
-      description: pub === "published" ? `"${title}" is now live.` : "Your changes have been saved.",
-    });
+    const targetStatus = pub === "published" ? "PUBLISHED" : "DRAFT";
+    try {
+      if (contentType === "blog") {
+        const blogPayload = {
+          title,
+          body,
+          status: targetStatus,
+          excerpt: body.slice(0, 200),
+          categoryId: categoryId && categoryId !== "none" ? categoryId : undefined,
+          featuredImage: featuredImage || undefined,
+          tagIds: selectedTagIds.length ? selectedTagIds : undefined,
+        };
+        if (id) {
+          await updatePost.mutateAsync({ id, ...blogPayload } as any);
+        } else {
+          await createPost.mutateAsync(blogPayload as any);
+        }
+      } else if (contentType === "resource") {
+        const resourcePayload = {
+          title,
+          description: body,
+          type: resourceType,
+          fileUrl: fileUrl || attachments[0]?.url || "",
+          coverUrl: coverUrl || undefined,
+          status: targetStatus,
+          tagIds: selectedTagIds.length ? selectedTagIds : undefined,
+        };
+        if (id) {
+          await updateResource.mutateAsync({ id, ...resourcePayload } as any);
+        } else {
+          await createResource.mutateAsync(resourcePayload as any);
+        }
+      } else {
+        // Sermon
+        const attachmentText = attachments.length
+          ? "\n\n---\n**Attachments:**\n" + attachments.map((a) => `- [${a.name}](${a.url})`).join("\n")
+          : "";
+        const sermonPayload: Record<string, unknown> = {
+          title,
+          speaker: speaker || "Unknown",
+          scripture,
+          description: body,
+          transcript: body + attachmentText,
+          status: targetStatus,
+          scheduledAt: date || undefined,
+          videoUrl: videoUrl || undefined,
+          audioUrl: audioUrl || undefined,
+          pdfUrl: pdfUrl || attachments.find((a) => a.name.endsWith(".pdf"))?.url || undefined,
+          seoTitle: seoTitle || undefined,
+          seoDescription: seoDesc || undefined,
+          seriesId: seriesId && seriesId !== "none" ? seriesId : undefined,
+          tagIds: selectedTagIds.length ? selectedTagIds : undefined,
+        };
+        if (id) {
+          await updateSermon.mutateAsync({ id, ...sermonPayload } as any);
+        } else {
+          await createSermon.mutateAsync(sermonPayload as any);
+        }
+      }
+      clearSaved();
+      setStatus(pub);
+      toast({
+        title: pub === "published" ? "Content published!" : "Draft saved",
+        description: pub === "published" ? `"${title}" is now live.` : "Your changes have been saved.",
+      });
+      navigate("/admin/content");
+    } catch {
+      toast({ title: "Save failed", description: "Please try again.", variant: "destructive" });
+    }
   };
 
   return (
@@ -281,14 +441,19 @@ For sermons, consider structuring with:
                   <h3 className="font-serif font-semibold text-foreground text-sm">Sermon Details</h3>
                   <div className="space-y-2">
                     <Label className="text-xs text-muted-foreground">Speaker</Label>
-                    <Select value={speaker} onValueChange={setSpeaker}>
-                      <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Select speaker" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Pastor James">Pastor James</SelectItem>
-                        <SelectItem value="Elder Sarah">Elder Sarah</SelectItem>
-                        <SelectItem value="Dr. Michael">Dr. Michael</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Input
+                      placeholder="e.g. Pastor James"
+                      value={speaker}
+                      onChange={(e) => setSpeaker(e.target.value)}
+                      className="bg-background border-border focus-visible:ring-gold"
+                      list="speaker-list"
+                      maxLength={200}
+                    />
+                    <datalist id="speaker-list">
+                      {(speakerList || []).map((sp) => (
+                        <option key={sp} value={sp} />
+                      ))}
+                    </datalist>
                   </div>
                   <div className="space-y-2">
                     <Label className="text-xs text-muted-foreground">Scripture Reference</Label>
@@ -300,9 +465,171 @@ For sermons, consider structuring with:
                       maxLength={100}
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Series</Label>
+                    <Select value={seriesId} onValueChange={setSeriesId}>
+                      <SelectTrigger className="bg-background border-border"><SelectValue placeholder="No series" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        {allSeries?.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Video URL</Label>
+                    <Input
+                      placeholder="https://youtube.com/..."
+                      value={videoUrl}
+                      onChange={(e) => setVideoUrl(e.target.value)}
+                      className="bg-background border-border focus-visible:ring-gold"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Audio URL</Label>
+                    <Input
+                      placeholder="https://..."
+                      value={audioUrl}
+                      onChange={(e) => setAudioUrl(e.target.value)}
+                      className="bg-background border-border focus-visible:ring-gold"
+                    />
+                  </div>
                 </CardContent>
               </Card>
             )}
+
+            {/* Post-specific fields */}
+            {contentType === "blog" && (
+              <Card className="bg-card border-border">
+                <CardContent className="p-5 space-y-4">
+                  <h3 className="font-serif font-semibold text-foreground text-sm">Post Details</h3>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Category</Label>
+                    <Select value={categoryId} onValueChange={setCategoryId}>
+                      <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Select category" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        {allCategories?.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Featured Image URL</Label>
+                    <Input
+                      placeholder="https://..."
+                      value={featuredImage}
+                      onChange={(e) => setFeaturedImage(e.target.value)}
+                      className="bg-background border-border focus-visible:ring-gold"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Resource-specific fields */}
+            {contentType === "resource" && (
+              <Card className="bg-card border-border">
+                <CardContent className="p-5 space-y-4">
+                  <h3 className="font-serif font-semibold text-foreground text-sm">Resource Details</h3>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Resource Type</Label>
+                    <Select value={resourceType} onValueChange={setResourceType}>
+                      <SelectTrigger className="bg-background border-border"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="document">Document</SelectItem>
+                        <SelectItem value="study-guide">Study Guide</SelectItem>
+                        <SelectItem value="presentation">Presentation</SelectItem>
+                        <SelectItem value="audio">Audio</SelectItem>
+                        <SelectItem value="video">Video</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">File URL</Label>
+                    <Input
+                      placeholder="https://..."
+                      value={fileUrl}
+                      onChange={(e) => setFileUrl(e.target.value)}
+                      className="bg-background border-border focus-visible:ring-gold"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Cover Image URL</Label>
+                    <Input
+                      placeholder="https://..."
+                      value={coverUrl}
+                      onChange={(e) => setCoverUrl(e.target.value)}
+                      className="bg-background border-border focus-visible:ring-gold"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Tags (for all content types) */}
+            <Card className="bg-card border-border">
+              <CardContent className="p-5 space-y-4">
+                <h3 className="font-serif font-semibold text-foreground text-sm">Tags</h3>
+                <div className="flex flex-wrap gap-2">
+                  {allTags?.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() =>
+                        setSelectedTagIds((prev) =>
+                          prev.includes(t.id) ? prev.filter((x) => x !== t.id) : [...prev, t.id]
+                        )
+                      }
+                      className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                        selectedTagIds.includes(t.id)
+                          ? "bg-gold/10 text-gold border-gold/30 font-medium"
+                          : "bg-background text-muted-foreground border-border hover:border-gold/30"
+                      }`}
+                    >
+                      {t.name}
+                    </button>
+                  ))}
+                  {(!allTags || allTags.length === 0) && (
+                    <p className="text-xs text-muted-foreground">No tags available. Create tags in the admin panel.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* File Attachments */}
+            <Card className="bg-card border-border">
+              <CardContent className="p-5 space-y-4">
+                <h3 className="font-serif font-semibold text-foreground text-sm">Attachments</h3>
+                <p className="text-xs text-muted-foreground">Attach PDF, PPT, DOCX files to this content</p>
+                <label className="flex items-center gap-2 cursor-pointer text-sm text-gold hover:text-gold-dark">
+                  <Paperclip className="w-4 h-4" />
+                  <span>{uploadMedia.isPending ? "Uploading..." : "Attach Files"}</span>
+                  <input
+                    type="file"
+                    className="hidden"
+                    multiple
+                    accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx"
+                    onChange={handleFileAttach}
+                    disabled={uploadMedia.isPending}
+                  />
+                </label>
+                {attachments.length > 0 && (
+                  <div className="space-y-2">
+                    {attachments.map((a, i) => (
+                      <div key={i} className="flex items-center justify-between text-sm bg-background rounded p-2 border border-border">
+                        <span className="truncate flex-1">{a.name}</span>
+                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => removeAttachment(i)}>
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             {/* SEO */}
             <Card className="bg-card border-border">
