@@ -26,7 +26,6 @@ import MediaLibrary from "./pages/admin/MediaLibrary";
 import Subscribers from "./pages/admin/Subscribers";
 import Inquiries from "./pages/admin/Inquiries";
 import SeriesManager from "./pages/admin/SeriesManager";
-import CategoriesManager from "./pages/admin/CategoriesManager";
 import TagsManager from "./pages/admin/TagsManager";
 import NotFound from "./pages/NotFound";
 import Profile from "./pages/admin/Profile";
@@ -68,7 +67,6 @@ const App = () => (
             <Route path="/admin/content/:id" element={<ProtectedRoute requiredRoles={[...CONTENT_ROLES]}><ContentEditor /></ProtectedRoute>} />
             <Route path="/admin/media" element={<ProtectedRoute requiredRoles={[...CONTENT_ROLES]}><MediaLibrary /></ProtectedRoute>} />
             <Route path="/admin/series" element={<ProtectedRoute requiredRoles={[...CONTENT_ROLES]}><SeriesManager /></ProtectedRoute>} />
-            <Route path="/admin/categories" element={<ProtectedRoute requiredRoles={[...CONTENT_ROLES]}><CategoriesManager /></ProtectedRoute>} />
             <Route path="/admin/tags" element={<ProtectedRoute requiredRoles={[...CONTENT_ROLES]}><TagsManager /></ProtectedRoute>} />
             <Route path="/admin/donations" element={<ProtectedRoute requiredRoles={[...FINANCE_ROLES]}><DonationLedger /></ProtectedRoute>} />
             <Route path="/admin/users" element={<ProtectedRoute requiredRoles={[...ADMIN_ROLES]}><UserRoles /></ProtectedRoute>} />

@@ -86,6 +86,8 @@ export interface Post {
   author?: { id: string; firstName: string; lastName: string };
   categoryId?: string;
   category?: Category;
+  seriesId?: string;
+  series?: Series;
   tags?: Tag[];
   createdAt: string;
   updatedAt: string;
@@ -119,6 +121,8 @@ export interface Resource {
   downloadCount: number;
   authorId: string;
   categoryId?: string;
+  seriesId?: string;
+  series?: Series;
   tags?: Tag[];
   createdAt: string;
   updatedAt: string;
@@ -145,7 +149,7 @@ export interface Series {
   description?: string;
   coverUrl?: string;
   sermonCount?: number;
-  _count?: { sermons: number };
+  _count?: { sermons: number; posts: number; resources: number };
   sermons?: Sermon[];
   createdAt: string;
   updatedAt: string;

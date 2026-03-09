@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard, FileText, DollarSign, Users, Settings, LogOut, ChevronLeft, ImageIcon, UserCircle, Mail, UsersRound, BookOpen, FolderOpen, Hash,
+  LayoutDashboard, FileText, DollarSign, Users, Settings, LogOut, ChevronLeft, ImageIcon, UserCircle, Mail, UsersRound, BookOpen, Hash,
 } from "lucide-react";
 import {
   SidebarProvider, Sidebar, SidebarContent, SidebarGroup,
@@ -19,8 +19,7 @@ const FINANCE_ROLES: Role[] = ["SUPER_ADMIN", "ADMIN", "FINANCE"];
 const navItems: { title: string; url: string; icon: typeof LayoutDashboard; roles?: Role[] }[] = [
   { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
   { title: "Content", url: "/admin/content", icon: FileText, roles: CONTENT_ROLES },
-  { title: "Series", url: "/admin/series", icon: BookOpen, roles: CONTENT_ROLES },
-  { title: "Categories", url: "/admin/categories", icon: FolderOpen, roles: CONTENT_ROLES },
+  { title: "Series Groups", url: "/admin/series", icon: BookOpen, roles: CONTENT_ROLES },
   { title: "Tags", url: "/admin/tags", icon: Hash, roles: CONTENT_ROLES },
   { title: "Media", url: "/admin/media", icon: ImageIcon, roles: CONTENT_ROLES },
   { title: "Donations", url: "/admin/donations", icon: DollarSign, roles: FINANCE_ROLES },

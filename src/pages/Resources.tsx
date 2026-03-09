@@ -1,9 +1,10 @@
-import { Download, FileText, BookOpen, Video, Music } from "lucide-react";
+import { Download, FileText, BookOpen, Video, Music, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { motion } from "framer-motion";
 import { usePublishedResources } from "@/hooks/useApi";
+import { useState } from "react";
 
 const typeIcons: Record<string, any> = {
   DOCUMENT: FileText,
@@ -12,9 +13,21 @@ const typeIcons: Record<string, any> = {
   BOOK: BookOpen,
 };
 
+const isVideoUrl = (url: string) =>
+  /\.(mp4|webm|ogg|mov)$/i.test(url) || /youtube\.com|youtu\.be|vimeo\.com/i.test(url);
+
+const isAudioUrl = (url: string) =>
+  /\.(mp3|wav|ogg|aac|m4a|flac|webm)$/i.test(url);
+
+const getYouTubeEmbedUrl = (url: string) => {
+  const match = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([\w-]+)/);
+  return match ? `https://www.youtube-nocookie.com/embed/${match[1]}` : null;
+};
+
 const Resources = () => {
   const { data, isLoading } = usePublishedResources();
   const resources = data?.data || [];
+  const [playingId, setPlayingId] = useState<string | null>(null);
 
   return (
     <main>
@@ -53,13 +66,47 @@ const Resources = () => {
                     {resource.description && (
                       <p className="mt-2 text-sm text-muted-foreground line-clamp-2">{resource.description}</p>
                     )}
+
+                    {/* Audio/Video Player */}
+                    {playingId === resource.id && resource.fileUrl && (
+                      <div className="mt-3">
+                        {resource.type?.toLowerCase() === "video" && isVideoUrl(resource.fileUrl) && !getYouTubeEmbedUrl(resource.fileUrl) && (
+                          <video controls className="w-full rounded border border-border" src={resource.fileUrl} />
+                        )}
+                        {resource.type?.toLowerCase() === "video" && getYouTubeEmbedUrl(resource.fileUrl) && (
+                          <iframe
+                            className="w-full aspect-video rounded border border-border"
+                            src={getYouTubeEmbedUrl(resource.fileUrl)!}
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                            title={resource.title}
+                          />
+                        )}
+                        {resource.type?.toLowerCase() === "audio" && (
+                          <audio controls className="w-full" src={resource.fileUrl} />
+                        )}
+                      </div>
+                    )}
+
                     <div className="mt-4 flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">{resource.downloadCount} downloads</span>
-                      <a href={resource.fileUrl} target="_blank" rel="noopener noreferrer">
-                        <Button size="sm" className="bg-gradient-gold text-primary font-semibold gap-1.5 hover:opacity-90">
-                          <Download className="w-3.5 h-3.5" /> Download
-                        </Button>
-                      </a>
+                      <div className="flex gap-2">
+                        {(resource.type?.toLowerCase() === "audio" || resource.type?.toLowerCase() === "video") && resource.fileUrl && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5 text-gold border-gold/30 hover:bg-gold/10"
+                            onClick={() => setPlayingId(playingId === resource.id ? null : resource.id)}
+                          >
+                            <Play className="w-3.5 h-3.5" /> {playingId === resource.id ? "Close" : "Play"}
+                          </Button>
+                        )}
+                        <a href={resource.fileUrl} target="_blank" rel="noopener noreferrer">
+                          <Button size="sm" className="bg-gradient-gold text-primary font-semibold gap-1.5 hover:opacity-90">
+                            <Download className="w-3.5 h-3.5" /> Download
+                          </Button>
+                        </a>
+                      </div>
                     </div>
                   </div>
                 </motion.div>

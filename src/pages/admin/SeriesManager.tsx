@@ -10,13 +10,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, BookOpen } from "lucide-react";
+import { Plus, Pencil, Trash2, BookOpen, Upload, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   useSeries,
   useCreateSeries,
   useUpdateSeries,
   useDeleteSeries,
+  useUploadMedia,
 } from "@/hooks/useApi";
 import type { Series } from "@/lib/api-types";
 
@@ -26,6 +27,7 @@ const SeriesManager = () => {
   const createSeries = useCreateSeries();
   const updateSeries = useUpdateSeries();
   const deleteSeries = useDeleteSeries();
+  const uploadMedia = useUploadMedia();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Series | null>(null);
@@ -153,14 +155,36 @@ const SeriesManager = () => {
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-foreground">Cover Image URL</label>
-              <Input
-                value={form.coverUrl}
-                onChange={(e) => setForm({ ...form, coverUrl: e.target.value })}
-                placeholder="https://..."
-                className="mt-1"
-                maxLength={500}
-              />
+              <label className="text-sm font-medium text-foreground">Cover Image</label>
+              {form.coverUrl ? (
+                <div className="mt-1 space-y-2">
+                  <img src={form.coverUrl} alt="Cover" className="w-full h-32 object-cover rounded border border-border" />
+                  <Button size="sm" variant="ghost" className="text-xs text-destructive" onClick={() => setForm({ ...form, coverUrl: "" })}>
+                    <X className="w-3 h-3 mr-1" /> Remove
+                  </Button>
+                </div>
+              ) : (
+                <label className="mt-1 flex items-center gap-2 cursor-pointer text-sm text-gold hover:text-gold-dark">
+                  <Upload className="w-4 h-4" />
+                  <span>{uploadMedia.isPending ? "Uploading..." : "Upload Image"}</span>
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        const asset = await uploadMedia.mutateAsync(file);
+                        setForm((prev) => ({ ...prev, coverUrl: asset.url }));
+                        toast({ title: "Image uploaded" });
+                      } catch { toast({ title: "Upload failed", variant: "destructive" }); }
+                      e.target.value = "";
+                    }}
+                    disabled={uploadMedia.isPending}
+                  />
+                </label>
+              )}
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>

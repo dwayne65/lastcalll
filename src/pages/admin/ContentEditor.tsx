@@ -23,7 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import MediaPickerDialog from "@/components/admin/MediaPickerDialog";
 import MarkdownPreview from "@/components/admin/MarkdownPreview";
 import { useAutosave } from "@/hooks/useAutosave";
-import { useCreateSermon, useUpdateSermon, useSpeakers, useCreatePost, useUpdatePost, useCreateResource, useUpdateResource, useUploadMedia, useSeries, useCategories, useTags } from "@/hooks/useApi";
+import { useCreateSermon, useUpdateSermon, useSpeakers, useCreatePost, useUpdatePost, useCreateResource, useUpdateResource, useUploadMedia, useSeries, useTags } from "@/hooks/useApi";
 import { api } from "@/lib/api-client";
 import type { Sermon, Post, Resource } from "@/lib/api-types";
 import type { MediaItem } from "@/data/mediaData";
@@ -93,13 +93,10 @@ const ContentEditor = () => {
   const [pdfUrl, setPdfUrl] = useState("");
   const [attachments, setAttachments] = useState<{ name: string; url: string }[]>([]);
 
-  // Post-specific
-  const [categoryId, setCategoryId] = useState("");
+  // Common fields
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const [featuredImage, setFeaturedImage] = useState("");
-
-  // Sermon-specific
   const [seriesId, setSeriesId] = useState("");
+  const [featuredImage, setFeaturedImage] = useState("");
 
   // Resource-specific
   const [resourceType, setResourceType] = useState("document");
@@ -114,7 +111,6 @@ const ContentEditor = () => {
   const updateResource = useUpdateResource();
   const { data: speakerList } = useSpeakers();
   const { data: allSeries } = useSeries();
-  const { data: allCategories } = useCategories();
   const { data: allTags } = useTags();
   const uploadMedia = useUploadMedia();
 
@@ -130,9 +126,9 @@ const ContentEditor = () => {
         setBody(p.body || "");
         setStatus(p.status === "PUBLISHED" ? "published" : "draft");
         setDate(p.publishedAt ? new Date(p.publishedAt).toISOString().split("T")[0] : "");
-        setCategoryId(p.categoryId || "");
         setSelectedTagIds(p.tags?.map((t) => t.id) || []);
         setFeaturedImage(p.featuredImage || "");
+        setSeriesId(p.seriesId || "");
       }).catch(() => {});
     } else if (contentType === "resource") {
       api.get<Resource>(`/resources/${id}`).then((r) => {
@@ -144,6 +140,7 @@ const ContentEditor = () => {
         setFileUrl(r.fileUrl || "");
         setCoverUrl(r.coverUrl || "");
         setSelectedTagIds(r.tags?.map((t) => t.id) || []);
+        setSeriesId(r.seriesId || "");
       }).catch(() => {});
     } else {
       api.get<Sermon>(`/sermons/${id}`).then((s) => {
@@ -236,8 +233,8 @@ const ContentEditor = () => {
           body,
           status: targetStatus,
           excerpt: body.slice(0, 200),
-          categoryId: categoryId && categoryId !== "none" ? categoryId : undefined,
           featuredImage: featuredImage || undefined,
+          seriesId: seriesId && seriesId !== "none" ? seriesId : undefined,
           tagIds: selectedTagIds.length ? selectedTagIds : undefined,
         };
         if (id) {
@@ -253,6 +250,7 @@ const ContentEditor = () => {
           fileUrl: fileUrl || attachments[0]?.url || "",
           coverUrl: coverUrl || undefined,
           status: targetStatus,
+          seriesId: seriesId && seriesId !== "none" ? seriesId : undefined,
           tagIds: selectedTagIds.length ? selectedTagIds : undefined,
         };
         if (id) {
@@ -434,6 +432,23 @@ For sermons, consider structuring with:
               </CardContent>
             </Card>
 
+            {/* Series — available for ALL content types */}
+            <Card className="bg-card border-border">
+              <CardContent className="p-5 space-y-4">
+                <h3 className="font-serif font-semibold text-foreground text-sm">Series</h3>
+                <p className="text-xs text-muted-foreground">Optionally group this content into a series</p>
+                <Select value={seriesId} onValueChange={setSeriesId}>
+                  <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Standalone (no series)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Standalone (no series)</SelectItem>
+                    {allSeries?.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </CardContent>
+            </Card>
+
             {/* Sermon-specific fields */}
             {contentType === "sermon" && (
               <Card className="bg-card border-border">
@@ -466,65 +481,119 @@ For sermons, consider structuring with:
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Series</Label>
-                    <Select value={seriesId} onValueChange={setSeriesId}>
-                      <SelectTrigger className="bg-background border-border"><SelectValue placeholder="No series" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        {allSeries?.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label className="text-xs text-muted-foreground">Video</Label>
+                    {videoUrl ? (
+                      <div className="flex items-center gap-2 text-sm bg-background rounded p-2 border border-border">
+                        <span className="truncate flex-1 text-xs">{videoUrl.split("/").pop()}</span>
+                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setVideoUrl("")}>
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 cursor-pointer text-sm text-gold hover:text-gold-dark">
+                          <Upload className="w-4 h-4" />
+                          <span>{uploadMedia.isPending ? "Uploading..." : "Upload Video"}</span>
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept="video/*"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              try {
+                                const asset = await uploadMedia.mutateAsync(file);
+                                setVideoUrl(asset.url);
+                                toast({ title: "Video uploaded" });
+                              } catch { toast({ title: "Upload failed", variant: "destructive" }); }
+                              e.target.value = "";
+                            }}
+                            disabled={uploadMedia.isPending}
+                          />
+                        </label>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span className="border-t border-border flex-1" />
+                          <span>or paste URL</span>
+                          <span className="border-t border-border flex-1" />
+                        </div>
+                        <Input
+                          placeholder="https://youtube.com/..."
+                          onChange={(e) => setVideoUrl(e.target.value)}
+                          className="bg-background border-border focus-visible:ring-gold text-sm h-8"
+                        />
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Video URL</Label>
-                    <Input
-                      placeholder="https://youtube.com/..."
-                      value={videoUrl}
-                      onChange={(e) => setVideoUrl(e.target.value)}
-                      className="bg-background border-border focus-visible:ring-gold"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Audio URL</Label>
-                    <Input
-                      placeholder="https://..."
-                      value={audioUrl}
-                      onChange={(e) => setAudioUrl(e.target.value)}
-                      className="bg-background border-border focus-visible:ring-gold"
-                    />
+                    <Label className="text-xs text-muted-foreground">Audio</Label>
+                    {audioUrl ? (
+                      <div className="flex items-center gap-2 text-sm bg-background rounded p-2 border border-border">
+                        <span className="truncate flex-1 text-xs">{audioUrl.split("/").pop()}</span>
+                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setAudioUrl("")}>
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <label className="flex items-center gap-2 cursor-pointer text-sm text-gold hover:text-gold-dark">
+                        <Upload className="w-4 h-4" />
+                        <span>{uploadMedia.isPending ? "Uploading..." : "Upload Audio"}</span>
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept="audio/*"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            try {
+                              const asset = await uploadMedia.mutateAsync(file);
+                              setAudioUrl(asset.url);
+                              toast({ title: "Audio uploaded" });
+                            } catch { toast({ title: "Upload failed", variant: "destructive" }); }
+                            e.target.value = "";
+                          }}
+                          disabled={uploadMedia.isPending}
+                        />
+                      </label>
+                    )}
                   </div>
                 </CardContent>
               </Card>
             )}
 
-            {/* Post-specific fields */}
+            {/* Post-specific: Featured Image */}
             {contentType === "blog" && (
               <Card className="bg-card border-border">
                 <CardContent className="p-5 space-y-4">
-                  <h3 className="font-serif font-semibold text-foreground text-sm">Post Details</h3>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Category</Label>
-                    <Select value={categoryId} onValueChange={setCategoryId}>
-                      <SelectTrigger className="bg-background border-border"><SelectValue placeholder="Select category" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        {allCategories?.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Featured Image URL</Label>
-                    <Input
-                      placeholder="https://..."
-                      value={featuredImage}
-                      onChange={(e) => setFeaturedImage(e.target.value)}
-                      className="bg-background border-border focus-visible:ring-gold"
-                    />
-                  </div>
+                  <h3 className="font-serif font-semibold text-foreground text-sm">Featured Image</h3>
+                  {featuredImage ? (
+                    <div className="space-y-2">
+                      <img src={featuredImage} alt="Featured" className="w-full h-32 object-cover rounded border border-border" />
+                      <Button size="sm" variant="ghost" className="text-xs text-destructive" onClick={() => setFeaturedImage("")}>
+                        <X className="w-3 h-3 mr-1" /> Remove
+                      </Button>
+                    </div>
+                  ) : (
+                    <label className="flex items-center gap-2 cursor-pointer text-sm text-gold hover:text-gold-dark">
+                      <Upload className="w-4 h-4" />
+                      <span>{uploadMedia.isPending ? "Uploading..." : "Upload Image"}</span>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          try {
+                            const asset = await uploadMedia.mutateAsync(file);
+                            setFeaturedImage(asset.url);
+                            toast({ title: "Image uploaded" });
+                          } catch { toast({ title: "Upload failed", variant: "destructive" }); }
+                          e.target.value = "";
+                        }}
+                        disabled={uploadMedia.isPending}
+                      />
+                    </label>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -548,22 +617,85 @@ For sermons, consider structuring with:
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">File URL</Label>
-                    <Input
-                      placeholder="https://..."
-                      value={fileUrl}
-                      onChange={(e) => setFileUrl(e.target.value)}
-                      className="bg-background border-border focus-visible:ring-gold"
-                    />
+                    <Label className="text-xs text-muted-foreground">Resource File</Label>
+                    {fileUrl ? (
+                      <div className="flex items-center gap-2 text-sm bg-background rounded p-2 border border-border">
+                        <Paperclip className="w-3 h-3 text-muted-foreground shrink-0" />
+                        <span className="truncate flex-1 text-xs">{fileUrl.split("/").pop()}</span>
+                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setFileUrl("")}>
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 cursor-pointer text-sm text-gold hover:text-gold-dark">
+                          <Upload className="w-4 h-4" />
+                          <span>{uploadMedia.isPending ? "Uploading..." : `Upload ${resourceType === "audio" ? "Audio" : resourceType === "video" ? "Video" : "File"}`}</span>
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept={resourceType === "audio" ? "audio/*" : resourceType === "video" ? "video/*" : undefined}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              try {
+                                const asset = await uploadMedia.mutateAsync(file);
+                                setFileUrl(asset.url);
+                                toast({ title: "File uploaded" });
+                              } catch { toast({ title: "Upload failed", variant: "destructive" }); }
+                              e.target.value = "";
+                            }}
+                            disabled={uploadMedia.isPending}
+                          />
+                        </label>
+                        {resourceType === "video" && (
+                          <>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <span className="border-t border-border flex-1" />
+                              <span>or paste URL</span>
+                              <span className="border-t border-border flex-1" />
+                            </div>
+                            <Input
+                              placeholder="https://youtube.com/..."
+                              onChange={(e) => setFileUrl(e.target.value)}
+                              className="bg-background border-border focus-visible:ring-gold text-sm h-8"
+                            />
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Cover Image URL</Label>
-                    <Input
-                      placeholder="https://..."
-                      value={coverUrl}
-                      onChange={(e) => setCoverUrl(e.target.value)}
-                      className="bg-background border-border focus-visible:ring-gold"
-                    />
+                    <Label className="text-xs text-muted-foreground">Cover Image</Label>
+                    {coverUrl ? (
+                      <div className="space-y-2">
+                        <img src={coverUrl} alt="Cover" className="w-full h-24 object-cover rounded border border-border" />
+                        <Button size="sm" variant="ghost" className="text-xs text-destructive" onClick={() => setCoverUrl("")}>
+                          <X className="w-3 h-3 mr-1" /> Remove
+                        </Button>
+                      </div>
+                    ) : (
+                      <label className="flex items-center gap-2 cursor-pointer text-sm text-gold hover:text-gold-dark">
+                        <Upload className="w-4 h-4" />
+                        <span>{uploadMedia.isPending ? "Uploading..." : "Upload Cover"}</span>
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept="image/*"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            try {
+                              const asset = await uploadMedia.mutateAsync(file);
+                              setCoverUrl(asset.url);
+                              toast({ title: "Cover uploaded" });
+                            } catch { toast({ title: "Upload failed", variant: "destructive" }); }
+                            e.target.value = "";
+                          }}
+                          disabled={uploadMedia.isPending}
+                        />
+                      </label>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -603,7 +735,7 @@ For sermons, consider structuring with:
             <Card className="bg-card border-border">
               <CardContent className="p-5 space-y-4">
                 <h3 className="font-serif font-semibold text-foreground text-sm">Attachments</h3>
-                <p className="text-xs text-muted-foreground">Attach PDF, PPT, DOCX files to this content</p>
+                <p className="text-xs text-muted-foreground">Attach supplementary files to this content</p>
                 <label className="flex items-center gap-2 cursor-pointer text-sm text-gold hover:text-gold-dark">
                   <Paperclip className="w-4 h-4" />
                   <span>{uploadMedia.isPending ? "Uploading..." : "Attach Files"}</span>
@@ -611,7 +743,6 @@ For sermons, consider structuring with:
                     type="file"
                     className="hidden"
                     multiple
-                    accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx"
                     onChange={handleFileAttach}
                     disabled={uploadMedia.isPending}
                   />

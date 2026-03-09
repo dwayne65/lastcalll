@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Plus, Search, Edit, Trash2, Eye } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { useAdminSermons, useDeleteSermon, useAdminPosts, useDeletePost, useAdminResources, useDeleteResource } from "@/hooks/useApi";
+import { useAdminSermons, useDeleteSermon, useAdminPosts, useDeletePost, useAdminResources, useDeleteResource, useSeries, useDeleteSeries } from "@/hooks/useApi";
+import { BookOpen } from "lucide-react";
 
 const statusColors: Record<string, string> = {
   PUBLISHED: "bg-green-500/10 text-green-700 border-green-200",
@@ -16,7 +17,7 @@ const statusColors: Record<string, string> = {
   ARCHIVED: "bg-muted text-muted-foreground border-border",
 };
 
-type ContentTab = "sermons" | "posts" | "resources";
+type ContentTab = "sermons" | "posts" | "resources" | "series";
 
 const ContentManager = () => {
   const [search, setSearch] = useState("");
@@ -27,31 +28,37 @@ const ContentManager = () => {
   const { data: sermonData, isLoading: loadingSermons } = useAdminSermons({ search: search || undefined, limit: 50 });
   const { data: postData, isLoading: loadingPosts } = useAdminPosts({ search: search || undefined, limit: 50 });
   const { data: resourceData, isLoading: loadingResources } = useAdminResources({ search: search || undefined, limit: 50 });
+  const { data: seriesData, isLoading: loadingSeries } = useSeries();
   const deleteSermon = useDeleteSermon();
   const deletePost = useDeletePost();
   const deleteResource = useDeleteResource();
+  const deleteSeries = useDeleteSeries();
 
   const sermons = sermonData?.data || [];
   const posts = postData?.data || [];
   const resources = resourceData?.data || [];
+  const allSeries = seriesData || [];
 
   const handleDelete = async (id: string, type: ContentTab) => {
     try {
       if (type === "sermons") await deleteSermon.mutateAsync(id);
       else if (type === "posts") await deletePost.mutateAsync(id);
-      else await deleteResource.mutateAsync(id);
+      else if (type === "resources") await deleteResource.mutateAsync(id);
+      else await deleteSeries.mutateAsync(id);
       toast({ title: "Content deleted", description: "The item has been removed." });
     } catch {
       toast({ title: "Delete failed", variant: "destructive" });
     }
   };
 
-  const isLoading = tab === "sermons" ? loadingSermons : tab === "posts" ? loadingPosts : loadingResources;
+  const isLoading = tab === "sermons" ? loadingSermons : tab === "posts" ? loadingPosts : tab === "series" ? loadingSeries : loadingResources;
 
   const items = tab === "sermons"
     ? sermons.map((s) => ({ id: s.id, title: s.title, slug: s.slug, subtitle: s.speaker, status: s.status, date: s.publishedAt || s.createdAt, views: s.viewCount }))
     : tab === "posts"
     ? posts.map((p) => ({ id: p.id, title: p.title, slug: p.slug, subtitle: p.author ? `${p.author.firstName} ${p.author.lastName}` : "", status: p.status, date: p.publishedAt || p.createdAt, views: p.viewCount }))
+    : tab === "series"
+    ? allSeries.map((s) => ({ id: s.id, title: s.title, slug: s.slug, subtitle: `${(s._count?.sermons || 0) + (s._count?.posts || 0) + (s._count?.resources || 0)} items`, status: "PUBLISHED" as const, date: s.createdAt, views: 0 }))
     : resources.map((r) => ({ id: r.id, title: r.title, slug: r.slug, subtitle: r.type, status: r.status, date: r.publishedAt || r.createdAt, views: r.downloadCount }));
 
   return (
@@ -62,22 +69,26 @@ const ContentManager = () => {
             <h1 className="text-2xl font-serif font-bold text-foreground">Content Manager</h1>
             <p className="text-sm text-muted-foreground mt-1">Manage sermons, blogs, and resources</p>
           </div>
-          <Button className="bg-gradient-gold text-primary font-semibold gap-2 hover:opacity-90" onClick={() => navigate(`/admin/content/new?type=${tab === "sermons" ? "sermon" : tab === "posts" ? "post" : "resource"}`)}>
-            <Plus className="w-4 h-4" /> New {tab === "sermons" ? "Sermon" : tab === "posts" ? "Post" : "Resource"}
+          <Button className="bg-gradient-gold text-primary font-semibold gap-2 hover:opacity-90" onClick={() => tab === "series" ? navigate("/admin/series") : navigate(`/admin/content/new?type=${tab === "sermons" ? "sermon" : tab === "posts" ? "post" : "resource"}`)}>
+            <Plus className="w-4 h-4" /> {tab === "series" ? "Manage Series" : `New ${tab === "sermons" ? "Sermon" : tab === "posts" ? "Post" : "Resource"}`}
           </Button>
         </div>
 
         {/* Tabs */}
         <div className="flex gap-1 mb-6 bg-muted p-1 rounded-lg w-fit">
-          {([["sermons", "Sermons"], ["posts", "Posts"], ["resources", "Resources"]] as const).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${tab === key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              {label}
-            </button>
-          ))}
+          {(["sermons", "posts", "resources", "series"] as const).map((key) => {
+            const labels: Record<string, string> = { sermons: "Sermons", posts: "Posts", resources: "Resources", series: "Series" };
+            return (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${tab === key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                {key === "series" && <BookOpen className="w-3.5 h-3.5 inline mr-1.5" />}
+                {labels[key]}
+              </button>
+            );
+          })}
         </div>
 
         <Card className="bg-card border-border">
@@ -100,10 +111,10 @@ const ContentManager = () => {
                 <thead>
                   <tr className="border-b border-border text-muted-foreground">
                     <th className="text-left p-4 font-medium">Title</th>
-                    <th className="text-left p-4 font-medium hidden lg:table-cell">{tab === "sermons" ? "Speaker" : tab === "posts" ? "Author" : "Type"}</th>
-                    <th className="text-left p-4 font-medium">Status</th>
+                    <th className="text-left p-4 font-medium hidden lg:table-cell">{tab === "sermons" ? "Speaker" : tab === "posts" ? "Author" : tab === "series" ? "Items" : "Type"}</th>
+                    {tab !== "series" && <th className="text-left p-4 font-medium">Status</th>}
                     <th className="text-left p-4 font-medium hidden md:table-cell">Date</th>
-                    <th className="text-left p-4 font-medium hidden lg:table-cell">{tab === "resources" ? "Downloads" : "Views"}</th>
+                    {tab !== "series" && <th className="text-left p-4 font-medium hidden lg:table-cell">{tab === "resources" ? "Downloads" : "Views"}</th>}
                     <th className="text-right p-4 font-medium">Actions</th>
                   </tr>
                 </thead>
@@ -112,23 +123,27 @@ const ContentManager = () => {
                     <tr key={item.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                       <td className="p-4 font-medium text-foreground max-w-xs truncate">{item.title}</td>
                       <td className="p-4 text-muted-foreground hidden lg:table-cell">{item.subtitle}</td>
-                      <td className="p-4">
-                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium border ${statusColors[item.status] || statusColors.DRAFT}`}>
-                          {item.status.toLowerCase()}
-                        </span>
-                      </td>
+                      {tab !== "series" && (
+                        <td className="p-4">
+                          <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium border ${statusColors[item.status] || statusColors.DRAFT}`}>
+                            {item.status.toLowerCase()}
+                          </span>
+                        </td>
+                      )}
                       <td className="p-4 text-muted-foreground hidden md:table-cell">
                         {new Date(item.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                       </td>
-                      <td className="p-4 text-muted-foreground hidden lg:table-cell">{(item.views || 0).toLocaleString()}</td>
+                      {tab !== "series" && <td className="p-4 text-muted-foreground hidden lg:table-cell">{(item.views || 0).toLocaleString()}</td>}
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => navigate(`/${tab === "sermons" ? "sermons" : tab === "posts" ? "blog" : "resources"}/${item.slug}`)}>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => tab === "series" ? navigate(`/series/${item.slug}`) : navigate(`/${tab === "sermons" ? "sermons" : tab === "posts" ? "blog" : "resources"}/${item.slug}`)}>
                             <Eye className="w-4 h-4" />
                           </Button>
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => navigate(`/admin/content/${item.id}?type=${tab === "sermons" ? "sermon" : tab === "posts" ? "post" : "resource"}`)}>
-                            <Edit className="w-4 h-4" />
-                          </Button>
+                          {tab !== "series" && (
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => navigate(`/admin/content/${item.id}?type=${tab === "sermons" ? "sermon" : tab === "posts" ? "post" : "resource"}`)}>
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          )}
                           <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(item.id, tab)}>
                             <Trash2 className="w-4 h-4" />
                           </Button>

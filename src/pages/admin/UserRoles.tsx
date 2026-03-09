@@ -33,8 +33,11 @@ const roleStyles: Record<string, string> = {
 };
 
 const permissions: Record<string, string[]> = {
-  ADMIN: ["Manage users", "Manage content", "View donations", "Edit settings", "Publish content"],
-  EDITOR: ["Manage content", "View donations", "Publish content"],
+  SUPER_ADMIN: ["Full system access", "Manage users & roles", "Manage content", "Publish content", "Manage donations", "Edit settings", "View audit logs"],
+  ADMIN: ["Manage users & roles", "Manage content", "Publish content", "View donations", "Edit settings"],
+  EDITOR: ["Create & edit content", "Publish content", "Manage media", "Manage series & tags"],
+  CONTRIBUTOR: ["Create & edit own content", "Submit for review", "Upload media"],
+  FINANCE: ["View donations", "Manage campaigns", "Export financial reports"],
   VIEWER: ["View content", "View donations"],
 };
 
@@ -154,11 +157,11 @@ const UserRoles = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid sm:grid-cols-3 gap-6">
-              {(["ADMIN", "EDITOR", "VIEWER"] as const).map((role) => (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {(["SUPER_ADMIN", "ADMIN", "EDITOR", "CONTRIBUTOR", "FINANCE", "VIEWER"] as const).map((role) => (
                 <div key={role} className="p-4 rounded-lg bg-background border border-border">
                   <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold border uppercase tracking-wider ${roleStyles[role]}`}>
-                    {role.toLowerCase()}
+                    {role.replace("_", " ").toLowerCase()}
                   </span>
                   <ul className="mt-3 space-y-1.5">
                     {permissions[role].map((perm) => (
