@@ -3,9 +3,25 @@ import { Mail, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
+import { useSubscribe } from "@/hooks/useApi";
+import { useToast } from "@/hooks/use-toast";
 
 const NewsletterSignup = () => {
   const [email, setEmail] = useState("");
+  const subscribe = useSubscribe();
+  const { toast } = useToast();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    try {
+      await subscribe.mutateAsync({ email });
+      toast({ title: "Subscribed!", description: "You're now signed up for updates." });
+      setEmail("");
+    } catch {
+      toast({ title: "Subscription failed", description: "Please try again.", variant: "destructive" });
+    }
+  };
 
   return (
     <section className="py-20 bg-background">
@@ -27,7 +43,7 @@ const NewsletterSignup = () => {
             directly in your inbox.
           </p>
           <form
-            onSubmit={(e) => e.preventDefault()}
+            onSubmit={handleSubmit}
             className="mt-8 flex flex-col sm:flex-row gap-3 max-w-md mx-auto"
           >
             <Input
@@ -39,9 +55,10 @@ const NewsletterSignup = () => {
             />
             <Button
               type="submit"
+              disabled={subscribe.isPending}
               className="bg-gradient-gold text-primary font-semibold gap-2 hover:opacity-90"
             >
-              Subscribe
+              {subscribe.isPending ? "Subscribing..." : "Subscribe"}
               <ArrowRight className="w-4 h-4" />
             </Button>
           </form>

@@ -1,14 +1,21 @@
 import { motion } from "framer-motion";
 import { Users, Globe, PlayCircle, BookOpen } from "lucide-react";
+import { usePublicStats, usePublicSettings } from "@/hooks/useApi";
 
-const metrics = [
-  { icon: PlayCircle, value: "1,200+", label: "Sermons Shared" },
-  { icon: Users, value: "50,000+", label: "Monthly Viewers" },
-  { icon: Globe, value: "85+", label: "Countries Reached" },
-  { icon: BookOpen, value: "300+", label: "Bible Studies" },
-];
+const ImpactMetrics = () => {
+  const { data: stats } = usePublicStats();
+  const { data: settings } = usePublicSettings();
 
-const ImpactMetrics = () => (
+  const fmt = (n?: number) => (n != null ? n.toLocaleString() : "—");
+
+  const metrics = [
+    { icon: PlayCircle, value: stats?.publishedSermons != null ? `${fmt(stats.publishedSermons)}+` : "—", label: "Sermons Shared" },
+    { icon: Users, value: stats?.activeSubscribers != null ? `${fmt(stats.activeSubscribers)}+` : "—", label: "Active Subscribers" },
+    { icon: Globe, value: settings?.countries_reached || "85+", label: "Countries Reached" },
+    { icon: BookOpen, value: stats?.totalSermonViews != null ? `${fmt(stats.totalSermonViews)}+` : "—", label: "Total Views" },
+  ];
+
+  return (
   <section className="py-20 bg-gradient-navy text-primary-foreground">
     <div className="container">
       <motion.h2
@@ -44,6 +51,7 @@ const ImpactMetrics = () => (
       </div>
     </div>
   </section>
-);
+  );
+};
 
 export default ImpactMetrics;

@@ -1,7 +1,18 @@
 import { Link } from "react-router-dom";
-import { Youtube, Instagram, Facebook } from "lucide-react";
+import { Youtube, Instagram, Facebook, Twitter, Globe } from "lucide-react";
+import { useSocialLinks } from "@/hooks/useApi";
 
-const Footer = () => (
+const platformIcons: Record<string, any> = {
+  youtube: Youtube,
+  instagram: Instagram,
+  facebook: Facebook,
+  twitter: Twitter,
+};
+
+const Footer = () => {
+  const { data: socialLinks } = useSocialLinks();
+
+  return (
   <footer className="bg-primary text-primary-foreground">
     <div className="container py-16">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
@@ -19,7 +30,7 @@ const Footer = () => (
             Explore
           </h4>
           <ul className="space-y-2">
-            {["Sermons", "About", "Donate", "Contact"].map((item) => (
+            {["Sermons", "Blog", "Resources", "About", "Donate", "Contact"].map((item) => (
               <li key={item}>
                 <Link
                   to={`/${item.toLowerCase()}`}
@@ -36,20 +47,21 @@ const Footer = () => (
             Connect
           </h4>
           <div className="flex gap-4">
-            {[
-              { icon: Youtube, label: "YouTube" },
-              { icon: Instagram, label: "Instagram" },
-              { icon: Facebook, label: "Facebook" },
-            ].map(({ icon: Icon, label }) => (
-              <a
-                key={label}
-                href="#"
-                aria-label={label}
-                className="w-10 h-10 rounded-full bg-primary-foreground/10 flex items-center justify-center hover:bg-gold/20 hover:text-gold transition-colors"
-              >
-                <Icon className="w-5 h-5" />
-              </a>
-            ))}
+            {(socialLinks || []).map((link) => {
+              const Icon = platformIcons[link.platform?.toLowerCase()] || Globe;
+              return (
+                <a
+                  key={link.platform}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={link.platform}
+                  className="w-10 h-10 rounded-full bg-primary-foreground/10 flex items-center justify-center hover:bg-gold/20 hover:text-gold transition-colors"
+                >
+                  <Icon className="w-5 h-5" />
+                </a>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -60,6 +72,7 @@ const Footer = () => (
       </div>
     </div>
   </footer>
-);
+  );
+};
 
 export default Footer;

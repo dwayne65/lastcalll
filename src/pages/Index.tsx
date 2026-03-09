@@ -2,6 +2,7 @@ import Navbar from "@/components/Navbar";
 import HeroSection from "@/components/HeroSection";
 import LatestSermons from "@/components/LatestSermons";
 import FeaturedSeries from "@/components/FeaturedSeries";
+import LatestPosts from "@/components/LatestPosts";
 import ImpactMetrics from "@/components/ImpactMetrics";
 import SocialFeed from "@/components/SocialFeed";
 import NewsletterSignup from "@/components/NewsletterSignup";
@@ -13,6 +14,7 @@ const Index = () => (
     <HeroSection />
     <LatestSermons />
     <FeaturedSeries />
+    <LatestPosts />
     <ImpactMetrics />
     <SocialFeed />
     <NewsletterSignup />

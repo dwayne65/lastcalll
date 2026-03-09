@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AdminLayout from "@/layouts/AdminLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,14 +9,27 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Globe, Bell, Palette, Shield, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useSettings, useUpdateSettings } from "@/hooks/useApi";
 
 const Settings = () => {
   const { toast } = useToast();
-  const [siteName, setSiteName] = useState("Last Call Messages");
-  const [tagline, setTagline] = useState("Sharing the everlasting gospel and the three angels' messages");
-  const [contactEmail, setContactEmail] = useState("contact@lastcallmessages.org");
-  const [address, setAddress] = useState("123 Advent Way, Suite 200, Berrien Springs, MI 49103");
-  const [phone, setPhone] = useState("(269) 555-0147");
+  const { data: settings } = useSettings();
+  const updateSettings = useUpdateSettings();
+
+  // Helper to get a setting value by key from grouped response
+  const getVal = (key: string, fallback = "") => {
+    if (!settings) return fallback;
+    for (const group of Object.values(settings)) {
+      if (key in group) return group[key];
+    }
+    return fallback;
+  };
+
+  const [siteName, setSiteName] = useState("");
+  const [tagline, setTagline] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState("");
 
   const [emailNotif, setEmailNotif] = useState(true);
   const [donationNotif, setDonationNotif] = useState(true);
@@ -29,8 +42,46 @@ const Settings = () => {
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [requireApproval, setRequireApproval] = useState(true);
 
+  // Seed local state from API
+  useEffect(() => {
+    if (!settings) return;
+    setSiteName(getVal("site_name", "Last Call Messages"));
+    setTagline(getVal("tagline", ""));
+    setContactEmail(getVal("contact_email", ""));
+    setAddress(getVal("address", ""));
+    setPhone(getVal("phone", ""));
+    setEmailNotif(getVal("email_notifications", "true") === "true");
+    setDonationNotif(getVal("donation_alerts", "true") === "true");
+    setNewSubNotif(getVal("new_subscriber_alerts", "false") === "true");
+    setWeeklyDigest(getVal("weekly_digest", "true") === "true");
+    setDarkMode(getVal("dark_mode", "false") === "true");
+    setCompactSidebar(getVal("compact_sidebar", "false") === "true");
+    setMaintenanceMode(getVal("maintenance_mode", "false") === "true");
+    setRequireApproval(getVal("require_approval", "true") === "true");
+  }, [settings]);
+
   const handleSave = () => {
-    toast({ title: "Settings saved", description: "Your changes have been applied." });
+    updateSettings.mutate(
+      [
+        { key: "site_name", value: siteName, group: "general" },
+        { key: "tagline", value: tagline, group: "general" },
+        { key: "contact_email", value: contactEmail, group: "general" },
+        { key: "address", value: address, group: "general" },
+        { key: "phone", value: phone, group: "general" },
+        { key: "email_notifications", value: String(emailNotif), group: "notifications" },
+        { key: "donation_alerts", value: String(donationNotif), group: "notifications" },
+        { key: "new_subscriber_alerts", value: String(newSubNotif), group: "notifications" },
+        { key: "weekly_digest", value: String(weeklyDigest), group: "notifications" },
+        { key: "dark_mode", value: String(darkMode), group: "appearance" },
+        { key: "compact_sidebar", value: String(compactSidebar), group: "appearance" },
+        { key: "maintenance_mode", value: String(maintenanceMode), group: "security" },
+        { key: "require_approval", value: String(requireApproval), group: "security" },
+      ],
+      {
+        onSuccess: () => toast({ title: "Settings saved", description: "Your changes have been applied." }),
+        onError: () => toast({ title: "Failed to save settings", variant: "destructive" }),
+      }
+    );
   };
 
   return (

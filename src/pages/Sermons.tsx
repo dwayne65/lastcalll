@@ -13,20 +13,9 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import SermonCard from "@/components/SermonCard";
 import { motion, AnimatePresence } from "framer-motion";
+import { usePublishedSermons, useSpeakers } from "@/hooks/useApi";
 import sermonThumb1 from "@/assets/sermon-thumb-1.jpg";
-import sermonThumb2 from "@/assets/sermon-thumb-2.jpg";
-import sermonThumb3 from "@/assets/sermon-thumb-3.jpg";
 
-const allSermons = [
-  { title: "The Seal of God and the Mark of the Beast", speaker: "Pastor James", date: "Feb 15, 2026", thumbnail: sermonThumb2, scripture: "Revelation 14:9-12", mediaTypes: ["video", "audio"] as ("video" | "audio")[], views: 1240 },
-  { title: "Righteousness by Faith: The Heart of the Gospel", speaker: "Elder Sarah", date: "Feb 8, 2026", thumbnail: sermonThumb1, scripture: "Romans 3:21-26", mediaTypes: ["video", "audio", "text"] as ("video" | "audio" | "text")[], views: 890 },
-  { title: "The Sabbath Rest: God's Gift for Weary Souls", speaker: "Pastor James", date: "Feb 1, 2026", thumbnail: sermonThumb3, scripture: "Hebrews 4:9-11", mediaTypes: ["audio", "text"] as ("audio" | "text")[], views: 2100 },
-  { title: "Daniel's Final Vision: Hope in Tribulation", speaker: "Dr. Michael", date: "Jan 25, 2026", thumbnail: sermonThumb3, scripture: "Daniel 12:1-4", mediaTypes: ["video"] as ("video")[], views: 650 },
-  { title: "The Sanctuary Message: Christ Our High Priest", speaker: "Elder Sarah", date: "Jan 18, 2026", thumbnail: sermonThumb1, scripture: "Hebrews 8:1-6", mediaTypes: ["video", "audio"] as ("video" | "audio")[], views: 1560 },
-  { title: "Health Reform: Temples of the Holy Spirit", speaker: "Pastor James", date: "Jan 11, 2026", thumbnail: sermonThumb2, scripture: "1 Corinthians 6:19-20", mediaTypes: ["audio"] as ("audio")[], views: 430 },
-];
-
-const speakers = ["All Speakers", "Pastor James", "Elder Sarah", "Dr. Michael"];
 const sortOptions = [
   { value: "newest", label: "Newest First" },
   { value: "oldest", label: "Oldest First" },
@@ -41,21 +30,17 @@ const Sermons = () => {
   const [sortBy, setSortBy] = useState("newest");
   const [showFilters, setShowFilters] = useState(false);
 
-  const filtered = allSermons
-    .filter((s) => {
-      const matchesSearch =
-        s.title.toLowerCase().includes(search.toLowerCase()) ||
-        s.scripture.toLowerCase().includes(search.toLowerCase());
-      const matchesSpeaker =
-        selectedSpeaker === "All Speakers" || s.speaker === selectedSpeaker;
-      return matchesSearch && matchesSpeaker;
-    })
-    .sort((a, b) => {
-      if (sortBy === "popular") return (b.views ?? 0) - (a.views ?? 0);
-      if (sortBy === "az") return a.title.localeCompare(b.title);
-      if (sortBy === "oldest") return new Date(a.date).getTime() - new Date(b.date).getTime();
-      return new Date(b.date).getTime() - new Date(a.date).getTime();
-    });
+  const { data: speakerList } = useSpeakers();
+  const speakers = ["All Speakers", ...(speakerList || [])];
+
+  const { data, isLoading } = usePublishedSermons({
+    search: search || undefined,
+    speaker: selectedSpeaker !== "All Speakers" ? selectedSpeaker : undefined,
+    sort: sortBy,
+    limit: 50,
+  });
+
+  const sermons = data?.data || [];
 
   const activeFilterCount = (selectedSpeaker !== "All Speakers" ? 1 : 0) + (search ? 1 : 0);
 
@@ -191,18 +176,33 @@ const Sermons = () => {
           {/* Results count */}
           <div className="mt-4 mb-2 flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              {filtered.length} sermon{filtered.length !== 1 ? "s" : ""} found
+              {isLoading ? "Loading..." : `${sermons.length} sermon${sermons.length !== 1 ? "s" : ""} found`}
             </p>
           </div>
 
           {/* Results */}
           <div className={`grid gap-6 ${viewMode === "grid" ? "sm:grid-cols-2 lg:grid-cols-3" : "grid-cols-1 max-w-3xl"}`}>
-            {filtered.map((sermon, i) => (
-              <SermonCard key={sermon.title} {...sermon} index={i} />
+            {sermons.map((sermon, i) => (
+              <SermonCard
+                key={sermon.id}
+                title={sermon.title}
+                slug={sermon.slug}
+                speaker={sermon.speaker}
+                date={sermon.publishedAt ? new Date(sermon.publishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}
+                thumbnail={sermon.thumbnailUrl || sermonThumb1}
+                scripture={sermon.scripture || ""}
+                mediaTypes={[
+                  ...(sermon.videoUrl ? ["video" as const] : []),
+                  ...(sermon.audioUrl ? ["audio" as const] : []),
+                  ...(sermon.transcript ? ["text" as const] : []),
+                ]}
+                index={i}
+                views={sermon.viewCount}
+              />
             ))}
           </div>
 
-          {filtered.length === 0 && (
+          {!isLoading && sermons.length === 0 && (
             <div className="text-center py-20">
               <p className="text-muted-foreground text-lg">No sermons found matching your search.</p>
               <Button variant="outline" onClick={clearFilters} className="mt-4 border-border text-muted-foreground">
